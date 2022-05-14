@@ -1,0 +1,514 @@
+---
+title: "Week3 NYPD Shooting Assignment"
+author: "DS Student"
+date: "5/14/2022"
+output:
+  pdf_document: default
+  html_document:
+    theme: cerulean
+    highlight: textmate
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(scales)
+library(lubridate)
+```
+# NYPD Shooting: Data wrangling, analysis, visualization and modeling
+
+The NYPD shooting data covers shootings in the five boroughs of NY, that may or may not have resulted in death of the victim, from 2006 ro 2020. Geographical location; age, gender, and race info on the perpetrator and victim; time and date of occurrence 
+are available in the data set.
+
+In this assignment I will clean the data set and explore the data. As I am new to R I will also experiment with different visualizations.
+
+
+## Import data
+
+Import data and print the first 6 entries
+
+```{r read-data}
+#df <- read.csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+df <- read.csv("NYPD_Shooting_Incident_Data__Historic_.csv")
+head(df)
+
+```
+
+## Column names 
+
+Print the column names
+
+```{r column-names}
+colnames(df)
+```
+## Select columns
+
+`select` columns to delete from data frame (mainly due to location of shooting and perpetrator or victim's sex).
+Print the first six rows of new data frame.
+
+```{r}
+df <- select(df, - c(JURISDICTION_CODE,LOCATION_DESC,PERP_RACE,VIC_RACE, Latitude:Lon_Lat))
+head(df)
+```
+## Summarize data set
+
+Summarize the data in each column; this also prints out the data type for each column.
+
+```{r}
+summary(df)
+```
+## Change data types
+
+Change the data types to factors, characters, or logical types.
+Change the column name for STATISTICAL_MURDER_FLAG to MURDER.
+Delete the duplicate STATISTICAL_MURDER_FLAG column.
+Print the first six entries.
+
+```{r}
+
+df <- df %>%
+  mutate(MURDER = as.logical(STATISTICAL_MURDER_FLAG),
+         VIC_SEX = as.factor(VIC_SEX),
+         VIC_AGE_GROUP = as.factor(VIC_AGE_GROUP),
+         INCIDENT_KEY = as.character(INCIDENT_KEY),
+         PERP_AGE_GROUP = as.factor(PERP_AGE_GROUP),
+         PERP_SEX = as.factor(PERP_SEX),
+         BORO = as.factor(BORO),
+         PRECINCT = as.factor(PRECINCT)) %>%
+  select(-c(STATISTICAL_MURDER_FLAG))
+
+  
+head(df)
+
+```
+
+Change the `OCCUR_DATE` variable to a date type.
+
+```{r}
+df <- df %>%
+  mutate(OCCUR_DATE = as.Date(OCCUR_DATE, 
+                              format= "%m/%d/%Y"))
+ 
+head(df)
+```
+
+
+Separate into `year`, `month`, and `day` columns using the `year()`, `month()`, `date()` functions from the lubridate package.
+Print the first six entries.
+
+```{r}
+df$year <- year(df$OCCUR_DATE)
+df$month <- month(df$OCCUR_DATE, label = TRUE)
+df$day <- day(df$OCCUR_DATE)
+
+df <- df %>%
+  select(INCIDENT_KEY, OCCUR_DATE, year, month, day, everything())
+    
+head(df)
+```
+Add an additional column of `hour` that contains the hour of the day the shooting occurred.
+
+```{r}
+# make a second column containing the OCCUR_TIME values
+df$OCCUR_HOUR <- df$OCCUR_TIME
+
+df <- df %>%
+  separate(OCCUR_HOUR,c('hour', 'minute', 'second'), ':') %>%
+  mutate(hour = as.double(hour)) %>%
+  select(-c(minute, second)) %>%
+  select(INCIDENT_KEY, OCCUR_DATE, year, month, day,hour, everything())
+ 
+head(df)
+```
+
+ 
+Change the `OCCUR_TIME` to the hour, minute, second format (class: Period) using using the `hms()` function from the lubridate package .
+
+
+```{r}
+df$OCCUR_TIME <- hms(df$OCCUR_TIME)
+
+head(df)
+
+```
+ 
+
+ 
+## Summarize the new data set
+
+The summary demonstrates that the data is cleaner. However, some entries are missing (for example in the PERP_AGE_GROUP and PERP_SEX). 
+In the following sections when we analyze and visualize variables with missing entries, we will filter them out for the analysis.
+
+```{r}
+summary(df)
+```
+
+## Exploring the dataframe
+
+1) how do the x and y coordinates and boroughs correlate with one another?
+2) what age groups are most commonly represented in the perpetrator and victim cohorts?
+3) what is the gender distribution of the victims?
+4) what has been the trend of number of shootings per year?
+5) are shootings more common in specific months or specific hours of the day?
+6) which boroughs have the highest number of shootings? What is the relationship between number of shootings and murders?
+
+I have intentionally chosen not to evaluate the race of the victim and perpetrator on this analysis - this may be a source of bias for this analysis.
+
+
+## Scatterplot of x and y coordinates
+
+**First visualization** in the assignment - part 1; demonstrates the geographical coordinates and whether the shooting resulted in a murder or not.
+
+```{r}
+coord_xy_1 <- ggplot(df, aes(x = X_COORD_CD, y = Y_COORD_CD, color = as.factor(MURDER))) +
+  geom_point()
+
+coord_xy_1
+```
+
+**First visualization** in the assignment - part 2; demonstrates the geographical coordinates and the color-coded boroughs.
+
+
+```{r}
+coord_xy_2 <- ggplot(df, aes(x = X_COORD_CD, y = Y_COORD_CD, color = BORO)) +
+  geom_point() +
+  labs(title = "NYPD shootings mapped on the x and y coordinates",
+       x = "x coordinate",
+       y = "y coordinate")
+       
+
+
+coord_xy_2
+```
+
+ By precincts
+```{r}
+brooklyn <- df %>% 
+  filter(BORO == "BROOKLYN") %>%
+  group_by(PRECINCT) %>%
+  ggplot(aes(x= PRECINCT, fill = PRECINCT)) +
+  geom_bar() +
+  labs(title = "Brooklyn: Number of shootings in each precinct",
+       x = "precincts",
+       y = "counts")
+  
+brooklyn
+
+
+```
+ 
+ 
+Map the x and y coordinates to the precincts in Brooklyn.
+ 
+```{r}
+coord_brooklyn <- df %>%
+  filter(BORO == "BROOKLYN") %>%
+  ggplot(aes(x = X_COORD_CD, y = Y_COORD_CD, color = factor(PRECINCT))) +
+  geom_point(alpha = 0.5) +
+  labs(title = "NYPD shootings in Brooklyn precincts - mapped on the x and y coordinates",
+       x = "x coordinate",
+       y = "y coordinate",
+       color = "precincts")
+       
+
+coord_brooklyn
+```
+ 
+ 
+## Vertical bar graph of perpetrators' age groups
+ 
+Print out the different categories in the perpetrators age group.
+ 
+```{r}
+unique(df$PERP_AGE_GROUP)
+```
+The data in this column is not tidy.
+If the levels are 1020, 224, or 940 filter them out.
+Print table of counts of known perpetrator age groups.
+
+```{r}
+df_perp_age_known <- df %>%
+  filter(PERP_AGE_GROUP %in% c('<18','18-24', '25-44', '45-64')) 
+  
+table(df_perp_age_known$PERP_AGE_GROUP)
+ 
+```
+**Second visualization** in the assignment - part 1.
+Vertical bar graph of perpetrators with a known age group.
+
+```{r}
+perp_age <- ggplot(df_perp_age_known, aes(x = PERP_AGE_GROUP, fill = factor(PERP_AGE_GROUP))) +
+  geom_bar(show.legend = FALSE) +
+  labs(title = "Perpetrator age group counts", 
+       x = "perpetrator age groups",
+       y = "count")
+  
+perp_age
+```
+
+
+
+
+## Vertical bar graph of victims' age groups
+ 
+Print out the different categories in the victims age .
+The data in this column is tidy.
+ 
+```{r}
+unique(df$VIC_AGE_GROUP)
+```
+ 
+Print out the count in each category
+ 
+```{r}
+table(df$VIC_AGE_GROUP)
+```
+ 
+**Second visualization** in the assignment - part 2.
+Plot victim age groups as a vertical bar graph
+ 
+```{r}
+vic_age <- df %>%
+  filter(VIC_AGE_GROUP %in% c('<18','18-24', '25-44', '45-64', '65+')) %>%
+  ggplot(aes(x = VIC_AGE_GROUP, fill = factor(VIC_AGE_GROUP))) +
+  geom_bar(show.legend = FALSE) +
+  labs(title = "Victims age group counts", 
+       x = "victim age groups",
+       y = "count")
+  
+vic_age
+```
+
+
+## Horizontal bar graph of victims' gender
+
+Table of counts of victims' gender
+
+```{r}
+table(df$VIC_SEX)
+```
+
+**Second visualization** in the assignment - part 3.
+Plot victim age groups as a vertical bar graph.
+`filter ` out the unknown (U) values.
+
+```{r}
+vic_sex <- df %>%
+  filter(VIC_SEX == c("F", "M")) %>%
+  ggplot(aes(x=VIC_SEX, fill = factor(VIC_SEX))) +
+  geom_bar() +
+  coord_flip()
+vic_sex
+```
+
+
+
+## Number of shootings each year
+
+Table of counts of shootings each year.
+
+```{r}
+table(df$year)
+```
+**Third visualization** in the assignment - part 1.
+Plot the number of shootings in each year, further grouped by month
+
+```{r}
+shootings_yearly <- ggplot(df, aes(x=year, fill=factor(month))) +
+  geom_bar()+
+  labs(title = "Number of shootings each year",
+       fill = "borough")
+
+shootings_yearly
+  
+```
+
+**Observation:** The bar graph demonstrates and overall decreasing trend in the number of shootings between 2012 and 2019 and an increase to 2011 numbers in 2020.
+
+
+## Number of shootings in each boroough
+
+**Third visualization** in the assignment - part 2.
+Vertical bar graph of shootings in each borough grouped by year.
+
+```{r}
+shootings_boro_yr <- ggplot(df, aes(x=BORO, fill = BORO)) +
+  geom_bar() +
+  labs(title = "Number of shootings in each borough",
+       x = "borough",
+       y = "counts")
+
+shootings_boro_yr
+```
+
+
+
+Shootings in each borough, factored by year.
+
+```{r}
+shootings_boro_yr <- ggplot(df, aes(x=BORO, fill=factor(year))) +
+  geom_bar() +
+  labs(title = "Number of shootings in each borough",
+       x = "borough",
+       y = "counts")
+
+shootings_boro_yr
+```
+
+**Observation:** Graph demonstrates that Brooklyn and Bronx have the highest number of shootings. Height of the different colored bars in these two boroughs also corroborates with the decreased number of shootings between 2012 and 2019 compared to prior years and 2020.
+
+
+**Third visualization** in the assignment - part 3.
+Vertical bar graph of shootings in each borough grouped by month.
+
+```{r}
+shootings_boro_mo <- ggplot(df, aes(x=BORO, fill=factor(month))) +
+  geom_bar() 
+
+shootings_boro_mo
+```
+
+**Observation:** Graph demonstrates that Brooklyn and Bronx have the highest number of shootings. Height of the different colored bars in these two boroughs also corroborates with the decreased number of shootings between 2012 and 2019 compared to prior years and 2020.
+
+
+This observation is corroborated when we summarize the total shooting counts per month as a table.
+
+```{r}
+table(df$month)
+```
+
+**Third visualization** in the assignment - part 4.
+Vertical bar graph of shootings in each borough grouped by whether or not it resulted in demise of the victim.
+
+```{r}
+shootings_boro_mur <- ggplot(df, aes(x=BORO, fill=factor(MURDER))) +
+  geom_bar() 
+
+shootings_boro_mur
+```
+
+
+
+
+## Number of shootings at different times of day
+
+**Third visualization** in the assignment - part 5.
+Number of shootings in each hour of the day subgrouped by MURDER.
+
+```{r}
+shootings_hour<- ggplot(df, aes(hour, fill = MURDER)) +
+  geom_bar() +
+  labs(title = "NYC shootings - incidents by time of day",
+  x = "hour of day", y = "count") 
+
+shootings_hour
+```
+
+**Observation:** Graph demonstrates that most shootings occur between 7 pm and 4 am.
+
+
+## Time series - from another student's work
+
+Number if shootings in different days of the week.
+I saw this visualization in another students' work and replicated it (with some minor changes) for the final presentation - originally I had analyzed the count of shooting for each year and time of day and visualized the months as a factor in the yearly shooting bar chart.
+
+  
+```{r}
+df_wd <- df %>%
+  mutate(DAY_OF_WEEK=factor(wday(OCCUR_DATE, label = TRUE, locale="English_United States"))) %>%
+  group_by(DAY_OF_WEEK) %>%
+  count()
+  
+df_wd %>% ggplot(aes(x = DAY_OF_WEEK, y = n, fill = DAY_OF_WEEK )) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "NYC shootings - incidents by day of the week",
+  x = "day of week", y = "count") 
+
+  
+
+```
+  
+In general, there were more shooting cases in summer months.
+I saw this visualization in another students' work and replicated it (with some changes) for the final presentation - originally I had looked analyzed and visualized the months as a factor in the yearly shooting bar chart, but I found this visualization much more informative. It also taught me how to effectively use group_by and ponder more carefully on my choice of variables for the x and y axes.
+
+
+```{r}
+
+df_m <- df %>%
+  mutate(YEAR=factor(year), MONTH=factor(month)) %>%
+  group_by(YEAR, MONTH) %>%
+  count() %>%
+  ungroup()
+
+df_m %>% ggplot(aes(x = MONTH, y = n, color = YEAR, group = YEAR)) +
+  geom_line(size = 1) +
+  labs(title = "NY shootings - incidents by month",
+  x = "month", y = "count per month")
+
+```
+
+
+## Linear model
+
+I could not figure out appropriate variables to evaluate with a linear model.
+I chose to evaluate 'MURDER' as a response variable and 'PERP_AGE_GROUP' as a predictor.
+
+
+```{r}
+mod_1 = lm(MURDER ~ c(PERP_AGE_GROUP), data = df_perp_age_known)
+
+summary(mod_1)
+```
+```{r}
+perp_age_murder <- df_perp_age_known %>%
+  ggplot(aes(PERP_AGE_GROUP, fill = MURDER)) +
+  geom_bar() +
+  labs(title = "Perpetrator age group and shootings resulting in murder",
+       x = "perpetrator age group",
+       y = "count"
+  )
+
+perp_age_murder
+
+```
+
+Visualizing the relationship between perpetrator's age group and whether the shooting results in a murder.
+
+```{r}
+perp_age_2 <- ggplot(df_perp_age_known, aes(x = PERP_AGE_GROUP, fill = MURDER)) +
+  geom_bar() +
+  labs(title = "Perpetrator age group and shootings resulting in murder", 
+       x = "perpetrator age groups",
+       y = "count",
+       fill = "MURDER")
+  
+perp_age_2
+```
+
+
+
+
+
+## Sources of potential bias
+
+As covered in week three's lecture bias may arise from multiple sources including the data scientist chose the particular topic to analyze, the questionnaire (for example, choice and wording of questions, and the multiple choice responses provided as options), the sample that is surveyed, the way missing or unknown data is handled, and how the results of the analysis are presented.
+
+As I am working with a data set that I was already available online, many on these sources of bias are not applicable. However, the variables that I chose to analyze and the relationships that I investigated (or did not investigate - such as race) may be clouded by my biases of expecting to find some associations between variables prior to visualizing and analyzing what the data actually demonstrate. Another source of bias are the missing data.
+
+This data set should be evaluated in the context of the other data for the NY population, such as income and education level. In addition, based on researching this data set online, each of the randomly generated INCIDENT_KEYs may be associated with more than one victim - I did not explore this aspect of the data set.
+
+ 
+## Summary
+
+The visualizations in this assignment demonstrate the NY shootings plotted for multiple variables including borough, year, month, perpetrators' and victims' age groups, and victims' gender. In order to generate a more meaningful model, other data sets (such as population, income, education) need to be joined to this data set to determine which predictive variables can foretell shooting rates and thus facilitate strategies for decreasing shootings in NY.
+ 
+ 
+
+#### Session Info
+
+```{r}
+sessionInfo()
+
+```
+
+
