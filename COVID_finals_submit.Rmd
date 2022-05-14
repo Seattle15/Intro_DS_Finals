@@ -3,10 +3,10 @@ title: "COVID_finals"
 author: "DS Student"
 date: "5/7/2022"
 output:
+  pdf_document: default
   html_document:
     theme: cerulean
     highlight: textmate
-  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
